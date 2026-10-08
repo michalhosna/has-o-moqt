@@ -1,0 +1,1891 @@
+
+
+
+
+Media Over QUIC                                                 M. Hosna
+Internet-Draft                                                     CDN77
+Intended status: Standards Track                          8 October 2026
+Expires: 11 April 2027
+
+
+  Transporting HTTP Adaptive Streaming over Media over QUIC Transport
+                   draft-hosna-moq-has-o-moqt-latest
+
+Abstract
+
+   This document defines a format-agnostic mapping of HTTP Adaptive
+   Streaming (HAS) presentations onto Media over QUIC Transport (MOQT).
+   Media units are carried unchanged and can be reconstructed byte-
+   identically; manifests are reconstructed as semantically equivalent
+   documents.  A publisher that understands the container can expose
+   finer-grained Objects.
+
+About This Document
+
+   This note is to be removed before publishing as an RFC.
+
+   The latest revision of this draft can be found at
+   https://michalhosna.github.io/has-o-moqt/draft-hosna-moq-has-
+   o-moqt.html.  Status information for this document may be found at
+   https://datatracker.ietf.org/doc/draft-hosna-moq-has-o-moqt/.
+
+   Discussion of this document takes place on the Media Over QUIC
+   Working Group mailing list (mailto:moq@ietf.org), which is archived
+   at https://mailarchive.ietf.org/arch/browse/moq/.  Subscribe at
+   https://www.ietf.org/mailman/listinfo/moq/.
+
+   Source for this draft and an issue tracker can be found at
+   https://github.com/michalhosna/has-o-moqt.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on 11 April 2027.
+
+Copyright Notice
+
+   Copyright (c) 2026 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents (https://trustee.ietf.org/
+   license-info) in effect on the date of publication of this document.
+   Please review these documents carefully, as they describe your rights
+   and restrictions with respect to this document.  Code Components
+   extracted from this document must include Revised BSD License text as
+   described in Section 4.e of the Trust Legal Provisions and are
+   provided without warranty as described in the Revised BSD License.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Scope
+   3.  Conventions and Definitions
+   4.  Overview
+   5.  Mapping HAS to MOQT
+     5.1.  Presentation to Track Namespace
+     5.2.  Relationship to MSF Catalogs
+     5.3.  Media Stream to Track
+     5.4.  Segment to Group
+     5.5.  Segment Addressing
+       5.5.1.  Template Syntax
+       5.5.2.  Group ID Calculation
+     5.6.  Object Structure within a Group
+     5.7.  Original Reference
+     5.8.  Part Reference
+     5.9.  Initialization Data
+     5.10. Response Header Fields
+     5.11. Manifest Carriage
+       5.11.1.  Snapshot Track
+       5.11.2.  Manifest Version Property
+     5.12. Mapping Manifest
+       5.12.1.  Updates
+     5.13. Index Track
+       5.13.1.  Index Document
+       5.13.2.  Updates
+     5.14. Payload Compression
+     5.15. Format Definitions
+     5.16. Property Codepoints
+     5.17. Live Edge, Seeking and DVR
+   6.  Reconstructing HAS at the Egress Gateway
+     6.1.  HTTP Status Codes
+     6.2.  HTTP Response Caching
+   7.  Built-in Extensions
+     7.1.  CMAF Containers
+     7.2.  Delta Track Extension
+       7.2.1.  Delta Track
+       7.2.2.  Egress Gateway Profiles
+       7.2.3.  Manifest Reconstruction
+     7.3.  Format Definition: MPEG-DASH
+       7.3.1.  Manifests
+       7.3.2.  Extensions
+       7.3.3.  Snapshot Form
+       7.3.4.  Delta Form
+       7.3.5.  Manifest Version
+       7.3.6.  Reset Points
+       7.3.7.  Low-Latency Advertisement
+       7.3.8.  Delta Requests
+       7.3.9.  Reconstruction
+       7.3.10. Media Identifiers
+       7.3.11. Addressing
+       7.3.12. Track Continuity
+       7.3.13. Containers
+     7.4.  Format Definition: HLS
+       7.4.1.  Manifests
+       7.4.2.  Extensions
+       7.4.3.  Snapshot Form
+       7.4.4.  Delta Form
+       7.4.5.  Manifest Version
+       7.4.6.  Reset Points
+       7.4.7.  Low-Latency Advertisement
+       7.4.8.  Delta and Blocking Requests
+       7.4.9.  Reconstruction
+       7.4.10. Media Identifiers
+       7.4.11. Addressing
+       7.4.12. Partial Segments
+       7.4.13. Track Continuity
+       7.4.14. Containers
+   8.  Security Considerations
+     8.1.  Relay-Visible Metadata
+     8.2.  Denial of Service
+   9.  IANA Considerations
+   10. References
+     10.1.  Normative References
+     10.2.  Informative References
+   Appendix A.  Egress Gateway Operation
+     A.1.  Configuration
+     A.2.  Serving a Request
+     A.3.  Choosing the Retrieval Mode
+     A.4.  Subscription Lifecycle and Cache
+     A.5.  Warming Up
+   Appendix B.  Examples
+     B.1.  Mapping Manifest
+     B.2.  Mapping Manifest Updates
+     B.3.  Index Track
+   Acknowledgments
+   Author's Address
+
+1.  Introduction
+
+   HAS structures a media presentation as a manifest plus independently
+   retrievable media segments, pulled over HTTP [RFC9110].  HTTP is
+   request/response, supports per-hop caching, and requires clients to
+   poll the manifest.  MPEG-DASH [MPEG-DASH] and HLS [RFC8216] are the
+   common formats.
+
+   Media over QUIC Transport (MOQT) [MoQTransport] delivers media as a
+   publish/subscribe stream of addressable Objects through relays that
+   fan out subscriptions and may cache.  Ingress and Egress Gateways
+   allow existing HTTP players to receive HAS presentations transported
+   over a MOQT backbone.
+
+   This document specifies that mapping.  Segments are carried unchanged
+   and reconstructed byte-identically at the egress; Manifests are
+   reconstructed as semantically equivalent documents.  A Subscriber
+   that understands the carried container can consume the media directly
+   from MOQT.
+
+   This mapping provides a compatibility option for existing HAS
+   deployments.  This document does not recommend it over other media
+   delivery approaches.  A design goal is to provide an end-user
+   experience no worse than that of delivering the same Presentation
+   over HTTP.
+
+   This document describes version 1 of the mapping.
+
+2.  Scope
+
+   This document:
+
+   *  Maps a HAS Presentation onto MOQT such that a Consumer
+      reconstructs the same Presentation.
+
+   *  Lets a Subscriber consume the Presentation directly from MOQT.
+
+   *  Keeps the HAS Manifest the authoritative source for structure,
+      adaptation and timing.
+
+   *  Covers low-latency live, conventional live and on-demand.
+
+   *  Lets a Presentation and an MSF catalog [MSF] coexist in one Track
+      Namespace, referencing the same Media Stream Tracks (Section 5.2).
+
+   The mapping is generic over streaming formats that deliver a manifest
+   and segments over HTTP.  A Format Definition (Section 5.15)
+   specializes it for one format.  This document contains the Format
+   Definitions for DASH (Section 7.3) and HLS (Section 7.4); other
+   Formats are extensions.  Media Stream Tracks are Format-independent;
+   Manifests of several Formats can reference one Track.
+
+   Out of scope:
+
+   *  A new media packaging or adaptation-set/catalog model.
+
+   *  Generating a Format the Presentation does not carry.
+
+3.  Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in
+   BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+   This document uses the terminology of [MoQTransport].
+
+   Note (to be removed before publication): this document also applies
+   to [MoQTransport] versions before -20; there a SUBSCRIBE carrying
+   FILL_PARAMETERS is a Joining Fetch (Section 10.12.2 of draft-ietf-
+   moq-transport-18 (https://www.ietf.org/archive/id/draft-ietf-moq-
+   transport-18.html#section-10.12.2)).
+
+   The sub-namespace labels (mapping, manifest, data), reserved Track
+   Names (has-o-moqt-mapping), and Track Namespace Field values this
+   document defines are US-ASCII ([RFC20]) octets, compared byte-for-
+   byte (Section 2.4.1 of [MoQTransport]).  Track Names a Publisher
+   binds through the Mapping Manifest (Section 5.12) are JSON strings;
+   the Track Name octets are the string's UTF-8 encoding (Section 8.1 of
+   [RFC8259]).
+
+   TODO: Binary Track Names are not representable; follow moq-wg/msf#209
+   (https://github.com/moq-wg/msf/issues/209) and adopt whatever MSF
+   settles on.
+
+   The outer Track Namespace Fields are a deployment choice
+   (Section 5.1); their values are opaque octets.
+
+   "HAS-o-MoQT" names this mapping; the lowercase form has-o-moqt
+   appears only in identifiers.
+
+   A _sub-namespace_ of a Track Namespace is the Track Namespace formed
+   by appending one Track Namespace Field to it; a PUBLISH_NAMESPACE for
+   the shorter namespace covers it (Section 9.5 of [MoQTransport]).
+
+   The following terms are used with the first letter capitalized.
+
+   Presentation:  One HAS live stream or on-demand asset, identified by
+      a single top-level manifest.
+
+   Manifest:  A document describing a Presentation.
+
+   Format:  A HAS manifest format, identified by its flavor value and
+      specified by a Format Definition (Section 5.15).
+
+   Snapshot Track:  The Track carrying a Manifest as full documents, one
+      per Group (Section 5.11.1).
+
+   Delta Track:  The Track carrying each state of a Manifest in the
+      Format's delta form (Section 7.2).
+
+   Manifest Version:  The Format-defined identity of one Manifest state
+      (Section 5.11.2).
+
+   Index Track:  The Track binding a Media Stream Track's Groups to
+      Request Paths (Section 5.13).
+
+   Media Stream:  One independently selectable encoding within a
+      Presentation.
+
+   Segment:  One independently addressable media unit of a Media Stream:
+      a whole retrievable file, or a byte range of a larger resource.
+
+   Chunk:  A self-delimiting sub-Segment unit the carried container
+      defines.
+
+   Initialization Data:  The bytes a decoder needs before consuming a
+      Media Stream's Segments.
+
+   Ingress Gateway:  An Original Publisher that converts existing HAS
+      into MOQT.
+
+   Egress Gateway:  The entity that subscribes to a Presentation and
+      reconstructs its Manifests and Segment responses for HTTP players.
+
+   Consumer:  A Subscriber to a Presentation's Tracks: an Egress
+      Gateway, or a player consuming the Presentation directly from
+      MOQT.
+
+   Mapping Manifest:  The document binding a Presentation's HTTP
+      resources to Tracks and Locations (Section 5.12).  Distinct from
+      the carried original Manifests.
+
+   Request Path:  The path component (Section 3.3 of [RFC3986]) of the
+      target URI (Section 7.1 of [RFC9110]) of an HTTP request for a
+      resource of the Presentation.
+
+   Root Path:  The prefix every Request Path of a Presentation shares
+      (Section 5.5).
+
+4.  Overview
+
+   A Presentation becomes one Track Namespace with three sub-namespaces
+   (Section 5.1); each Segment becomes one Group of its Media Stream's
+   Track.
+
+   Track Namespace
+     mapping/
+       Mapping Manifest Track
+       Index Tracks
+     manifest/
+       Snapshot Tracks
+       Format extension Tracks
+     data/
+       Media Stream Tracks
+
+5.  Mapping HAS to MOQT
+
+5.1.  Presentation to Track Namespace
+
+   A Presentation maps to exactly one Track Namespace.  The Original
+   Publisher MUST advertise it with one PUBLISH_NAMESPACE.  The Track
+   Namespace itself holds no Tracks; it contains the following sub-
+   namespaces:
+
+   *  mapping: the Mapping Manifest Track (Section 5.12) and the Index
+      Tracks (Section 5.13).
+
+   *  manifest: the Snapshot Tracks and Format extension Tracks
+      (Section 5.11).
+
+   *  data: the Media Stream Tracks (Section 5.4) and, where the
+      Presentation also exposes an MSF catalog, the catalog track
+      (Section 5.2).
+
+5.2.  Relationship to MSF Catalogs
+
+   A Publisher MAY expose the same media as both a HAS-o-MoQT
+   Presentation and an MSF [MSF] catalog of any streaming format.
+   Placing the catalog track (Track Name catalog, Section 5 of [MSF]) in
+   the data sub-namespace lets catalog entries reference the Media
+   Stream Tracks by name alone, through namespace inheritance
+   (Section 5.2.2 of [MSF]).  The mapping and manifest sub-namespaces
+   play no part in the catalog.  The Track Name catalog is reserved in
+   the data sub-namespace.
+
+5.3.  Media Stream to Track
+
+   Each Media Stream maps to one Track.  The Mapping Manifest binds each
+   Manifest's identifiers to Track Names (Section 5.12).  A change of
+   Initialization Data or encoding along a Media Stream begins a new
+   Track; a Format Definition MUST define the Manifest events that
+   require a new Track.
+
+5.4.  Segment to Group
+
+   Each Segment maps to one Group.  The Original Publisher MUST publish
+   Group IDs that increase with the media timeline along a Media Stream,
+   assigned by the Track's addressing scheme (Section 5.5).  The
+   Original Publisher MUST NOT set the Prior Group ID Gap property
+   (Section 12.8 of [MoQTransport]) over a Segment it may still publish.
+
+5.5.  Segment Addressing
+
+   Every Request Path of a Presentation begins with its Root Path.
+   Manifest references outside it (keys, license servers) are not
+   resources of the Presentation; players fetch them directly.  Every
+   path this document carries in MOQT is relative to the Root Path.  How
+   an HTTP authority and the Root Path map to a Track Namespace is
+   deployment configuration (Appendix A.1).
+
+   A Request Path cannot in general be reversibly encoded as a Full
+   Track Name and Location.  Object 0 of each Group carries the
+   Segment's Request Path and byte range in HAS_ORIGINAL_REFERENCE
+   (Section 5.7).  The Track's addressing entry in the Mapping Manifest
+   (Section 5.12) resolves a Request Path to a Group ID by its scheme
+   field:
+
+   *  template: the entry contains a String template and Numbers
+      startNumber and startGroup.
+
+   *  time: the entry contains a String template and Numbers startTime,
+      duration and startGroup.
+
+   *  index: the entry contains indexTrack, a String giving the Track
+      Name of the Media Stream Track's Index Track in the mapping sub-
+      namespace (Section 5.13).
+
+   The numeric fields are non-negative integers, except duration, which
+   MUST be a positive integer. startGroup and every calculated Group ID
+   MUST be in the Group ID range defined by [MoQTransport].  A Consumer
+   MUST perform the calculations below without loss of integer
+   precision.
+
+   A Segment has exactly one Request Path; Manifests of every Format
+   reference it by that Request Path.  A Request Path MUST NOT match
+   more than one addressing entry of a Presentation.
+
+5.5.1.  Template Syntax
+
+   A template is a path relative to the Root Path.  A template entry
+   MUST contain exactly one $Number$ or $Number%0<width>d$ capture.  A
+   time entry MUST contain exactly one $Time$ or $Time%0<width>d$
+   capture.  The width is a positive decimal integer.
+
+   An unformatted capture matches a non-negative decimal integer with no
+   leading zeros, except for the value zero.  A formatted capture
+   matches that integer zero-padded to at least the specified width.  In
+   either template, $$ matches a literal $; every other octet matches
+   itself.
+
+5.5.2.  Group ID Calculation
+
+   For a template entry, let V be the captured integer.  The Group ID
+   is:
+
+   V - startNumber + startGroup
+
+   A value below startNumber matches no Segment.  A restart of the
+   Segment numbering begins a new Track.
+
+   For a time entry, let V be the captured integer.  The Group ID is:
+
+   (V - startTime) / duration + startGroup
+
+   A value matches no Segment unless it is startTime plus a whole non-
+   negative multiple of duration.  A Track with varying Segment
+   durations uses index addressing.
+
+   A captured value that would produce a Group ID outside the valid
+   range matches no Segment.
+
+5.6.  Object Structure within a Group
+
+   Every Track this document defines carries its Objects in Subgroup 0.
+
+   A Segment's bytes are carried verbatim as the Objects of its Group:
+
+   *  Object 0 MUST begin at a random-access point.
+
+   *  The Objects of a Group MUST carry Object IDs 0 to N with no gap,
+      where N is the last Object.
+
+   *  The Publisher MUST signal the end of the Group (Section 11.2.1.1
+      of [MoQTransport], Section 11.4.2 of [MoQTransport]).
+
+   A Publisher MAY carry a Segment as a single Object or split it across
+   several.  Object boundaries carry no media semantics.  A Publisher
+   SHOULD align Object boundaries to the container's Chunk boundaries.
+   The Publisher MUST set the HAS_OBJECT_OFFSET property (Section 5.16)
+   on every Object of the Group: the Object's byte offset within the
+   Segment, as a varint.  Object offsets within a Segment MUST describe
+   a contiguous byte sequence beginning at offset zero.
+
+   A Format Definition MUST define the containers the Format carries:
+   the Chunk, the random-access point, and whether the container is
+   self-initializing.
+
+   Encrypted samples and in-band DRM metadata pass through unchanged;
+   the mapping does not decrypt, re-encrypt, or parse media.
+
+   TODO: Consider non-byte-exact carriage (locmaf, transmuxing between
+   containers) and how to communicate the Egress Gateway requirements
+   for reconstruction.
+
+5.7.  Original Reference
+
+   HAS_ORIGINAL_REFERENCE (Section 5.16) is an Object Property.  A
+   Publisher MUST set it on Object 0 of every Group of a Media Stream
+   Track.  The value is a JSON object:
+
+   *  path: String.  The Segment's Request Path relative to the Root
+      Path.
+
+   *  range: String.  Present where the Segment is a byte range of a
+      larger resource; the range in HTTP first-last form (Section 14.1.2
+      of [RFC9110]).
+
+5.8.  Part Reference
+
+   A Format MAY address parts: sub-Segment units with their own Request
+   Paths or byte ranges, advertised by its Manifests.  On a Track
+   carrying parts, the Publisher MUST align Object boundaries to part
+   boundaries and MUST set HAS_PART_REFERENCE (Section 5.16) on the
+   first Object of each part: a JSON object as in Section 5.7, holding
+   the part's Request Path and byte range.
+
+   A Consumer resolves a part from the HAS_PART_REFERENCE values it has
+   received.  A part no Manifest still advertises may be unresolvable.
+
+5.9.  Initialization Data
+
+   A Media Stream's Initialization Data is carried either as the
+   VIDEO_CONFIG (Section 2.3.2.1 of [LOC]) or AUDIO_CONFIG
+   (Section 2.3.3.1 of [LOC]) Track Property on that Media Stream's
+   Track, or inline in the Mapping Manifest (Section 5.12).  A self-
+   initializing container has no Initialization Data.
+
+5.10.  Response Header Fields
+
+   The original response header fields of each HTTP resource are carried
+   in the HAS_RESPONSE_HEADERS property (Section 5.16), at two levels:
+
+   *  As a Track Property: the header fields common to every response
+      reconstructed from the Track.  A Publisher MUST set it on every
+      Track that reconstructs an HTTP response (every Media Stream Track
+      and Snapshot Track, and extension Tracks as their extension
+      defines), and MUST include Content-Type set to the reconstructed
+      resource's registered media type.
+
+   *  As an Object Property on Object 0 of a Group: the header fields in
+      which that Segment's response differs from the Track level.  A
+      Publisher MAY set it.
+
+   The value is a JSON object keyed by lower-cased field name
+   (Section 5.1 of [RFC9110]).  A member value is a String (one field
+   line), an Array of Strings (one field line per element), or null.
+
+   The header fields of a response are the members of the Track-level
+   property, each replaced by the Object-level member of the same field
+   name where one exists, plus the remaining Object-level members;
+   members with value null are omitted.  An Ingress Gateway MUST keep
+   the source's order of the field lines of one field name within the
+   Array, and an Egress Gateway MUST emit them in that order.  The order
+   of fields with different field names is not significant (Section 5.3
+   of [RFC9110]).
+
+   TODO: Consider a more concise encoding and/or compression, especially
+   for per-Object headers.
+
+   A Publisher MUST NOT carry the following header fields in these
+   properties, and a Consumer MUST ignore them if present:
+
+   *  Content-Range
+
+   *  Vary
+
+   *  connection-specific header fields (Section 7.6.1 of [RFC9110])
+
+   TODO: Give either a more exhaustive list or a general rule; the
+   behavior is intended to match an HTTP proxy's.
+
+   TODO: Specify Vary handling at the Ingress Gateway; it should not
+   accept resources with a Vary header.
+
+5.11.  Manifest Carriage
+
+   A Format Definition MUST define which documents of a Presentation are
+   its Manifests.  Each Manifest is carried on a Snapshot Track in the
+   manifest sub-namespace, named by the Mapping Manifest (Section 5.12).
+   A Format extension (Section 5.15) MAY add Tracks per Manifest to the
+   manifest sub-namespace, named in the Mapping Manifest.  A Consumer
+   that does not implement the extension ignores them.
+
+5.11.1.  Snapshot Track
+
+   The Original Publisher MUST publish a Snapshot Track for every
+   carried Manifest:
+
+   *  Each Group holds exactly one Object (Object ID 0): the full
+      Manifest in the Format's snapshot form.
+
+   *  Each Group's ID MUST be one greater than that of the previous
+      Group.
+
+   *  Each Object MUST carry the HAS_MANIFEST_VERSION Object Property
+      where the Format defines a version for the Manifest
+      (Section 5.11.2).
+
+   *  The Publisher MUST start a new Group at every reset point the
+      Format defines (Section 5.15) and at the end of the Presentation.
+
+   *  For a live Presentation, the Publisher MUST publish a new Group on
+      every Manifest change.
+
+   A Format Definition MUST define the snapshot form: the full Manifest
+   with every feature removed that a Consumer of the Snapshot Track
+   alone could not honor.
+
+   An Egress Gateway serves the latest Snapshot Object verbatim, unless
+   it implements a Format extension that defines otherwise.
+
+5.11.2.  Manifest Version Property
+
+   HAS_MANIFEST_VERSION (Section 5.16) is an Object Property identifying
+   one Manifest state.  Its value is US-ASCII octets whose grammar and
+   ordering the Format defines (Section 5.15).  A Format MAY leave a
+   Manifest without a version; its Objects carry no
+   HAS_MANIFEST_VERSION.
+
+5.12.  Mapping Manifest
+
+   The Mapping Manifest is a JSON document carried on its own Track in
+   the mapping sub-namespace (Section 5.1), under the reserved Track
+   Name has-o-moqt-mapping.  The Original Publisher MUST publish it.
+   Track Names in the Mapping Manifest are UTF-8 (Section 3).
+
+   Object 0 of each Group is a full document; later Objects are update
+   documents (Section 5.12.1).  The Publisher MUST start a new Group
+   before any Object of the current Group expires under the Track's
+   MAX_CACHE_DURATION (Section 12.3 of [MoQTransport]), and SHOULD start
+   one often enough to bound the updates a joining Consumer processes.
+
+   Tracks, Initialization Data and addressing can change during
+   playback.  A Consumer MUST process each new Mapping Manifest version
+   as it arrives.
+
+   Two version numbers are carried as Track Properties on the Mapping
+   Manifest Track; the two advance independently:
+
+   *  HAS_O_MOQT_VERSION (Section 5.16): the HAS-o-MoQT revision, 1 for
+      this document.
+
+   *  HAS_MAPPING_SCHEMA_VERSION (Section 5.16): the Mapping Manifest
+      schema, 1 for this document.
+
+   A Consumer MUST NOT consume a Presentation whose HAS_O_MOQT_VERSION
+   or HAS_MAPPING_SCHEMA_VERSION it does not implement, and MUST ignore
+   Mapping Manifest fields it does not recognize.
+
+   The following rules apply to the Mapping Manifest:
+
+   *  Unless specified otherwise, fields listed in this section are
+      REQUIRED.
+
+   *  Track Names and references to entry identifiers are JSON Strings.
+
+   *  Each manifests entry has a unique path within the Mapping
+      Manifest.
+
+   *  Each tracks entry has a unique name within the Mapping Manifest.
+
+   *  Each initDataList entry has a unique id within the Mapping
+      Manifest.
+
+   *  Every track and initRef reference MUST identify a declared entry.
+
+   A Consumer MUST reject a Mapping Manifest document that omits a
+   required field, uses an invalid type or value for a recognized field,
+   contains duplicate entry identifiers, or leaves an unresolved entry
+   reference.  A Consumer MUST validate an update document's resulting
+   state before replacing its previous state.  Unrecognized fields are
+   ignored as specified above.
+
+   Rejecting a document has the following consequences:
+
+   *  The Consumer MUST NOT use the rejected document to establish or
+      replace its Mapping Manifest state.  Any previous valid state
+      remains unchanged; no operation of a rejected update is applied.
+
+   *  The Consumer MUST NOT apply subsequent update Objects in the
+      rejected document's Group, because they depend on the state that
+      document would have produced.
+
+   *  To resume applying Mapping Manifest documents, the Consumer MUST
+      obtain a valid full document from Object 0 of a later Group
+      (Section 5.12.1).
+
+   Rejection of a Mapping Manifest document does not by itself require
+   terminating the MOQT connection.
+
+   Root fields:
+
+   *  generatedAt: Number, a non-negative integer giving milliseconds
+      since the Unix epoch.  Optional.
+
+   *  fallbackOrigin: String, an absolute URL prefix: the egress
+      fallback for unbound Request Paths (Section 6).  Optional.
+
+   *  isLive: Boolean.  True for a live Presentation, false for on-
+      demand; changes only to false, when a live Presentation ends.
+
+   *  manifests: Array of entries for the carried original Manifests
+      (below).
+
+   *  initDataList: Array of Initialization Data entries (below).
+
+   *  tracks: Array of Track entries (below).
+
+   Each manifests entry binds one original Manifest to its Tracks
+   (Section 5.11):
+
+   *  flavor: String identifying the Format (Section 5.15).  This
+      document defines dash (Section 7.3) and hls (Section 7.4).
+
+   *  path: String.  The Manifest's Request Path relative to the Root
+      Path.
+
+   *  snapshotTrack: Track Name of the Snapshot Track, in the manifest
+      sub-namespace.
+
+   *  extension: Object.  Fields of the Format extensions in use for
+      this Manifest (Section 5.15).  Optional.
+
+   *  media: Array of bindings from the Manifest's own identifiers to
+      Media Stream Tracks.  Each binding contains track, the Track Name
+      in the data sub-namespace, and the Format-defined identifier
+      fields (Section 5.15).  Optional for a Manifest that does not
+      directly identify any Media Streams.
+
+   Each initDataList entry follows Section 5.1.7 of [MSF]:
+
+   *  id: String, unique within the Mapping Manifest; Tracks reference
+      it via initRef.
+
+   *  type: String, either "inline" as in [MSF], or "track-property"
+      (Section 5.9), which this document defines.
+
+   *  data: String, by type:
+
+      -  "inline": the Initialization Data in base64 (Section 5.1.7 of
+         [MSF]).
+
+      -  "track-property": the Property Type of the Track Property
+         carrying it (Section 5.9), as a hex string: 0x0D for
+         VIDEO_CONFIG, 0x0F for AUDIO_CONFIG.
+
+   *  path: String.  The Request Path of the Initialization Data
+      resource, relative to the Root Path.
+
+   *  range: String.  Present where the Initialization Data is a byte
+      range of a larger resource; as in Section 5.7.
+
+   *  headers: Object.  The response header fields of the Initialization
+      Data resource, in the value form of Section 5.10; MUST include
+      Content-Type.
+
+   Each tracks entry describes one Media Stream Track:
+
+   *  name: String.  The Track Name in the data sub-namespace.
+
+   *  initRef: String.  The initDataList id of this Media Stream's
+      Initialization Data.  REQUIRED when the container is not self-
+      initializing; omitted otherwise (Section 5.9).
+
+   *  addressing: Object.  The addressing entry (Section 5.5),
+      containing scheme and the scheme's fields.
+
+5.12.1.  Updates
+
+   An update document holds one root field, deltaUpdate: an Array of
+   operation objects applied in order to the document produced by the
+   previous Object of the Group.  Each operation carries op and one of
+   tracks, manifests or initDataList, an Array of entries of that kind:
+
+   *  add: entries not previously declared.
+
+   *  remove: entries to remove, each holding only its name, path or id.
+
+   *  clone: tracks only, as in Section 5.1.6 of [MSF].
+
+   An entry's fields do not change after it is declared; a change is a
+   remove of the entry and an add of a new one, in that order within one
+   update document.  A Track entry references its initDataList entry by
+   initRef; an update document that adds both lists the initDataList
+   operation first.
+
+   Update documents change only the tracks, manifests and initDataList
+   arrays.  To change any other root field, including setting isLive to
+   false when a live Presentation ends, the Publisher MUST begin a new
+   Group whose Object 0 contains the complete updated Mapping Manifest.
+
+5.13.  Index Track
+
+   An index-addressed Media Stream Track (Section 5.5) has one Index
+   Track.  It uses the Object structure of the Mapping Manifest Track:
+   Object 0 of each Group is a full Index Document, later Objects are
+   update documents (Section 5.13.2).
+
+5.13.1.  Index Document
+
+   A JSON object with one root field, bindings: an Array of Segment
+   bindings ordered by group ascending, one per published Group of the
+   Media Stream Track:
+
+   *  group: Number.  The Group ID.
+
+   *  path: String.  The Segment's Request Path relative to the Root
+      Path.
+
+   *  range: String.  Present where the Segment is a byte range; as in
+      Section 5.7.
+
+   path and range equal the Group's HAS_ORIGINAL_REFERENCE value
+   (Section 5.7).  The bindings sharing one path MUST tile the resource
+   contiguously, ordered by group.  The Original Publisher MUST publish
+   a Segment's binding no later than any Manifest Object referencing the
+   Segment.  A full document holds the bindings of every Group the
+   Original Publisher retains.
+
+5.13.2.  Updates
+
+   An update document holds the same root field; its entries append to
+   the held Array.  An expired Group's bindings disappear at the next
+   full document.
+
+5.14.  Payload Compression
+
+   A Publisher MAY compress non-media Track payloads (the Mapping
+   Manifest, the Index Tracks, and the Tracks of the manifest sub-
+   namespace) with the MSF_COMPRESSION Track Property or Object
+   Property, under the rules of Section 12.1 of [MSF].  A Consumer MUST
+   support the algorithms [MSF] mandates (GZIP, [RFC1952]).
+
+   TODO (downref): [RFC1952], [MSF] and [I-D.pantos-hls-rfc8216bis] are
+   Informational; the normative references to them are downrefs under
+   BCP 97 (Section 1 of [RFC3967], Section 2 of [RFC8067]).  Call out in
+   the IETF Last Call and record in the downref registry
+   (https://datatracker.ietf.org/doc/downref/).  If moq-wg/moq-
+   transport#1850 (https://github.com/moq-wg/moq-transport/issues/1850)
+   is adopted, switch to the transport's compression properties and drop
+   both references.
+
+5.15.  Format Definitions
+
+   A Format Definition binds one flavor value (Section 5.12) to the
+   Format-defined parts of the mapping; the rest of this document treats
+   a Format as opaque.  It declares the Format extensions the Format
+   adopts.  This document defines the DASH and HLS mappings; additional
+   Format Definitions are specified in separate documents.
+
+   A Format Definition MUST specify:
+
+   *  The documents that are Manifests (Section 5.11).
+
+   *  The snapshot form of each Manifest (Section 5.11.1).
+
+   *  Whether each Manifest has a version and, if so, its grammar and
+      ordering (Section 5.11.2).
+
+   *  The reset points that start new Snapshot Groups (Section 5.11.1).
+
+   *  The Manifest identifiers used in media bindings (Section 5.12).
+
+   *  The Manifest events that require a new Media Stream Track
+      (Section 5.3).
+
+   *  The supported containers, their Chunk and random-access
+      boundaries, and whether they are self-initializing (Section 5.6).
+
+   *  The adopted Format extensions and any Format-specific definitions
+      those extensions require.
+
+   A Format extension defines Tracks, Properties or extension fields
+   beyond the generic mapping, for use by any Format that adopts it.  A
+   Consumer implements an extension per Format.
+
+5.16.  Property Codepoints
+
+   Property Types are taken from the application-specific range 0x3800
+   to 0x3FFF of Section 2.5 of [MoQTransport].  An even Type carries a
+   varint value, an odd Type length-prefixed octets (Section 1.4.3 of
+   [MoQTransport]).  This document and its revisions allocate 0x3800 to
+   0x38FF; a Format or extension document allocates from 0x3900 to
+   0x3FFF and lists its codepoints.  A Consumer interprets a property
+   only per the Formats and extensions declared for the Presentation
+   (Section 5.12).
+
+    +======+============================+========+==========+=========+
+    |  Type| Name                       | Scope  | Value    | Defined |
+    |      |                            |        |          | in      |
+    +======+============================+========+==========+=========+
+    |0x3800| HAS_O_MOQT_VERSION         | Track  | varint   | Section |
+    |      |                            |        |          | 5.12    |
+    +------+----------------------------+--------+----------+---------+
+    |0x3801| HAS_RESPONSE_HEADERS       | Track, | JSON     | Section |
+    |      |                            | Object | text     | 5.10    |
+    +------+----------------------------+--------+----------+---------+
+    |0x3802| HAS_MAPPING_SCHEMA_VERSION | Track  | varint   | Section |
+    |      |                            |        |          | 5.12    |
+    +------+----------------------------+--------+----------+---------+
+    |0x3803| HAS_ORIGINAL_REFERENCE     | Object | JSON     | Section |
+    |      |                            |        | text     | 5.7     |
+    +------+----------------------------+--------+----------+---------+
+    |0x3806| HAS_OBJECT_OFFSET          | Object | varint   | Section |
+    |      |                            |        |          | 5.6     |
+    +------+----------------------------+--------+----------+---------+
+    |0x3807| HAS_PART_REFERENCE         | Object | JSON     | Section |
+    |      |                            |        | text     | 5.8     |
+    +------+----------------------------+--------+----------+---------+
+    |0x3809| HAS_MANIFEST_VERSION       | Object | US-ASCII | Section |
+    |      |                            |        |          | 5.11.2  |
+    +------+----------------------------+--------+----------+---------+
+
+                                  Table 1
+
+   A Consumer MUST interpret these types only on Tracks of a HAS-o-MoQT
+   Presentation (Section 5.1).
+
+5.17.  Live Edge, Seeking and DVR
+
+   A Consumer locates a Segment through the Mapping Manifest alone
+   (Section 5.5).  The Track's Largest Object places the located Group
+   relative to the live edge, which decides the retrieval and, at an
+   Egress Gateway, the response state (Section 6.1):
+
+   *  Live edge: the newest Segment is the Group of the Largest Object;
+      new Segments arrive as new Groups.  To follow the edge the
+      Consumer subscribes to the Track.
+
+   *  Joining at a past Group: a SUBSCRIBE carrying FILL_PARAMETERS
+      (Section 10.2.15 of [MoQTransport]) delivers the subscription
+      filter's past range on a fill fetch stream.
+
+   *  DVR and on-demand seeking: a FETCH over an explicit Group range
+      (Section 5.1.2 of [MoQTransport]).
+
+   *  Seeking by media time: for a time-addressed Track, from its
+      addressing entry (Section 5.5); else from the Manifest.
+
+6.  Reconstructing HAS at the Egress Gateway
+
+   An Egress Gateway receives an HTTP request, classifies its Request
+   Path through the Mapping Manifest (Section 5.12), and builds the
+   response from MOQT:
+
+   *  A Manifest request: as Section 5.11.1 defines.
+
+   *  An Initialization Data request: as Section 5.9 defines, at the
+      initDataList path, served with the entry's headers.
+
+   *  A Segment request: the Request Path resolves via Section 5.5 to a
+      (Track, Group) or, for a resource carried as byte-range Segments,
+      to the Groups covering the requested range (Section 5.13.1).  The
+      response body is the concatenation of the resolved Groups'
+      Objects, cut to the requested range by HAS_OBJECT_OFFSET
+      (Section 5.6).
+
+   *  Any other Request Path: where fallbackOrigin is set
+      (Section 5.12), the gateway MAY proxy the request to
+      fallbackOrigin plus the Request Path; else the response is 404.
+
+   For a Segment carried as a byte range whose first resource byte is B,
+   an Object with HAS_OBJECT_OFFSET O begins at resource byte B+O.  For
+   a whole-resource Segment, B is zero.  The Egress Gateway selects the
+   Objects intersecting the requested resource range, orders them by
+   their resource offsets, and trims the first and last Objects to that
+   range.  It MUST NOT include bytes outside the requested range.
+
+   The Egress Gateway emits the header set of Section 5.10 on every
+   response.  For a byte-range response it MUST add Content-Range and
+   use status 206; these are derived per request and are not among the
+   carried fields.
+
+   Appendix A gives an informative example of gateway configuration,
+   retrieval and subscription management.
+
+6.1.  HTTP Status Codes
+
+   The HTTP status is determined by the existence state of the requested
+   Objects (Section 2.1 of [MoQTransport]) together with the Segment's
+   position relative to the live edge and the DVR window (Section 5.4).
+   The following table gives the recommended status mapping.  An Egress
+   Gateway SHOULD use these statuses for the listed conditions.
+
+   +=============================+=============+=======================+
+   | Condition                   |      Status | Response behavior     |
+   +=============================+=============+=======================+
+   | Group present and complete  |         200 | Full body;            |
+   | (end of Group signaled),    |             | Content-Length        |
+   | whole-Segment request       |             | known                 |
+   +-----------------------------+-------------+-----------------------+
+   | As above, satisfiable byte- |         206 | Content-Range for     |
+   | range request               |             | the requested         |
+   |                             |             | range                 |
+   +-----------------------------+-------------+-----------------------+
+   | Byte-range request that     |         416 | Content-Range:        |
+   | cannot be satisfied         |             | bytes */<len>; for    |
+   |                             |             | a shared resource,    |
+   |                             |             | <len> is the last     |
+   |                             |             | binding's range       |
+   |                             |             | end                   |
+   +-----------------------------+-------------+-----------------------+
+   | Group beyond the live edge  |         200 | Hold the response     |
+   | (Group ID greater than the  |             | until the Object      |
+   | Group of the Largest        |             | arrives; 404 past     |
+   | Object), live Track         |             | the deadline          |
+   +-----------------------------+-------------+-----------------------+
+   | Group still open (end of    |         200 | Stream Objects in     |
+   | Group not yet signaled),    |             | the response body     |
+   | low-latency live            |             | as they arrive;       |
+   |                             |             | complete the          |
+   |                             |             | response when the     |
+   |                             |             | end of the Group      |
+   |                             |             | is signaled           |
+   +-----------------------------+-------------+-----------------------+
+   | An Object of the Group      |         404 | Segment is missing    |
+   | known to not exist (a Non-  |             | at the source         |
+   | Existent range in a FETCH   |             |                       |
+   | response, Section 11.4.4.2  |             |                       |
+   | of [MoQTransport], or Prior |             |                       |
+   | Object ID Gap, Section 12.9 |             |                       |
+   | of [MoQTransport])          |             |                       |
+   +-----------------------------+-------------+-----------------------+
+   | Group before the oldest     | 404 (410 if | Outside the DVR       |
+   | Group the source retains    |       known | window                |
+   |                             | permanently |                       |
+   |                             |       gone) |                       |
+   +-----------------------------+-------------+-----------------------+
+   | Request beyond End of Track |         404 | No such Segment       |
+   | (finalized on-demand asset, |             |                       |
+   | or a live Presentation that |             |                       |
+   | has ended)                  |             |                       |
+   +-----------------------------+-------------+-----------------------+
+   | Request Path referenced by  |         200 | Hold until the        |
+   | the served Manifest but not |             | binding arrives       |
+   | yet bound by an Index Track |             | (Section 5.13.1);     |
+   | entry                       |             | 404 past the          |
+   |                             |             | deadline              |
+   +-----------------------------+-------------+-----------------------+
+   | Part request not yet        |         200 | Hold until the        |
+   | resolvable (Section 5.8)    |             | part's first          |
+   |                             |             | Object arrives;       |
+   |                             |             | 404 past the          |
+   |                             |             | deadline              |
+   +-----------------------------+-------------+-----------------------+
+   | Request Path not bound by   |     404, or | Proxied to            |
+   | the Mapping Manifest        |     proxied | fallbackOrigin        |
+   |                             |             | where set             |
+   |                             |             | (Section 5.12);       |
+   |                             |             | else not found        |
+   +-----------------------------+-------------+-----------------------+
+   | Upstream SUBSCRIBE / FETCH  |         502 | Upstream error,       |
+   | rejected by relay or origin |             | not a gateway         |
+   |                             |             | fault                 |
+   +-----------------------------+-------------+-----------------------+
+   | Upstream unreachable or no  |         504 | Upstream timeout      |
+   | response within the         |             |                       |
+   | gateway's deadline          |             |                       |
+   +-----------------------------+-------------+-----------------------+
+   | Gateway's own failure       |         500 | Internal error        |
+   +-----------------------------+-------------+-----------------------+
+
+                                  Table 2
+
+   For a held response, the Egress Gateway MUST defer sending response
+   headers until the condition for serving the response is met or its
+   deadline expires.  The 200 status in a hold row applies when that
+   condition is met; the timeout status applies if the deadline expires
+   first.  Once response headers have been sent, the gateway cannot
+   change the status; if retrieval subsequently fails, it MUST terminate
+   the incomplete response using the applicable HTTP version's error
+   handling.
+
+   When streaming an open Group, the Egress Gateway MUST use response
+   framing appropriate to the HTTP version.  It MUST NOT send a Content-
+   Length unless the complete response length is known.
+
+   Manifest and Initialization Data requests use the same table: 200
+   when the resource is present on its Track, 404 when the Mapping
+   Manifest has no such resource, and the 500, 502 and 504 rows for
+   upstream and internal failures.  Delta and blocking requests
+   (Section 7.2) add:
+
+    +=======================+========+===============================+
+    | Condition             | Status | Response behavior             |
+    +=======================+========+===============================+
+    | Delta request on a    | 200 or | Full Manifest for a directive |
+    | non-delta gateway     |    404 | on the Manifest path; 404 for |
+    |                       |        | an unadvertised path          |
+    |                       |        | (Section 7.2.1)               |
+    +-----------------------+--------+-------------------------------+
+    | Delta request on a    | 200 or | As a non-delta gateway        |
+    | delta-capable gateway |    404 |                               |
+    | whose held state has  |        |                               |
+    | no Delta Object       |        |                               |
+    | (Section 7.2.1)       |        |                               |
+    +-----------------------+--------+-------------------------------+
+    | Blocking Manifest     |    200 | Current Manifest, directive   |
+    | request on a non-     |        | ignored                       |
+    | delta gateway         |        |                               |
+    +-----------------------+--------+-------------------------------+
+    | Blocking Manifest     |    200 | Hold until the held version   |
+    | request on a delta-   |        | reaches the requested one     |
+    | capable gateway,      |        | (Section 7.2.3); 404 past the |
+    | version not yet       |        | deadline                      |
+    | reached               |        |                               |
+    +-----------------------+--------+-------------------------------+
+
+                                 Table 3
+
+6.2.  HTTP Response Caching
+
+   An Egress Gateway SHOULD apply the following caching policy
+   ([RFC9111]) to reconstructed responses, subject to operator
+   configuration:
+
+   *  Cache-Control: max-age derived from the resource's
+      MAX_CACHE_DURATION (Section 12.3 of [MoQTransport]), plus
+      immutable ([RFC8246]) for Segments and Initialization Data
+      (Section 2.1 of [MoQTransport]).  Further caching policy is left
+      to the operator.
+
+   *  Vary: omitted; the MOQT cache key (Full Track Name, Group ID,
+      Object ID) takes no request-header input.  The gateway emits Vary:
+      Accept-Encoding only when it negotiates a content coding of its
+      own.
+
+7.  Built-in Extensions
+
+   This section defines the extensions and Format Definitions included
+   in this document.  Additional extensions and Format Definitions are
+   specified in separate documents (Section 5.15).
+
+7.1.  CMAF Containers
+
+   For a Format carrying CMAF [CMAF]: a Chunk is a CMAF Chunk
+   (moof+mdat), Initialization Data is the CMAF Header (ftyp+moov), and
+   the container is not self-initializing.
+
+7.2.  Delta Track Extension
+
+   A Format MAY adopt this extension, which carries each state of a
+   Manifest on a Delta Track in the Format's delta form.  A Consumer
+   opts in by subscribing to the Delta Track; nothing is negotiated with
+   the Original Publisher.
+
+   A Format Definition adopting it MUST define:
+
+   *  which of its Manifests may have a Delta Track; a Manifest without
+      a version (Section 5.11.2) cannot have one.
+
+   *  the delta form: the document a Delta Object carries.
+
+   *  how a Delta Object is applied to the held Manifest
+      (Section 7.2.3).
+
+   *  the delta and blocking requests (Section 7.2.2).
+
+   The extension adds to the manifests entry's extension object
+   (Section 5.12):
+
+   *  deltaTrack: Track Name of the Delta Track, in the manifest sub-
+      namespace.
+
+   *  lowLatency: Object.  What a delta-capable gateway adds to the
+      Manifest it serves; schema per Format.  Optional.
+
+7.2.1.  Delta Track
+
+   The Original Publisher MAY publish a Delta Track for a carried
+   Manifest:
+
+   *  Delta Group G holds exactly one Object (Object ID 0) in the
+      Format's delta form; applied to the Manifest of Snapshot Group G-1
+      it MUST produce that of Snapshot Group G, up to the features the
+      snapshot form removes (Section 5.11.1).
+
+   *  The Object MUST carry HAS_MANIFEST_VERSION, equal to Snapshot
+      Group G's.
+
+   *  The Publisher omits the Delta Group of a state it cannot express
+      in the delta form and MUST set the Prior Group ID Gap property
+      (Section 12.8 of [MoQTransport]) on the next one; a Consumer MUST
+      recover its held state from the Snapshot Track as specified in
+      Section 7.2.3.
+
+   A Delta Track has no Request Path.
+
+7.2.2.  Egress Gateway Profiles
+
+   For each Format, an Egress Gateway operates as either a non-delta or
+   a delta-capable gateway.  Delta requests are HTTP requests that a
+   delta-capable gateway answers using Delta Objects.  Blocking requests
+   are HTTP requests whose responses are deferred until a specified
+   Manifest Version is available (Section 6.1).
+
+   A non-delta gateway serves Manifests per Section 5.11.1.
+
+   A delta-capable gateway:
+
+   *  Takes the latest Snapshot Object (Group G) as its held state,
+      subscribes to the Delta Track with FILL_PARAMETERS whose Location
+      Filter starts at Group G+1 (Section 5.1.2 of [MoQTransport]), and
+      applies the Delta Objects in order (Section 7.2.3).
+
+   *  Serves the full Manifest from its held state, with the Format's
+      low-latency additions (Section 5.15), and deltas from the Delta
+      Objects.
+
+   *  Serves a Manifest without a Delta Track as a non-delta gateway
+      does.
+
+   Serving a Snapshot Object verbatim preserves the bytes of the
+   published snapshot form (Section 5.11.1), which may differ from the
+   source Manifest.  A Manifest reconstructed from Delta Objects is
+   semantically equivalent to the corresponding snapshot form, with any
+   low-latency additions specified by the Format.
+
+7.2.3.  Manifest Reconstruction
+
+   A Consumer of a Delta Track MUST maintain one held state per
+   Manifest, consisting of a reconstructed Manifest and its
+   corresponding Group ID.
+
+   *  A Consumer MUST apply Delta Object G only to held state G-1.
+      Applying it produces held state G, whose version is the Object's
+      HAS_MANIFEST_VERSION.
+
+   *  If a Consumer receives Delta Object G while its held state
+      precedes G-1, it MUST wait for the intervening Delta Objects.  If
+      a Prior Group ID Gap indicates that a required Delta Group is
+      absent, or the Consumer's deadline expires, the Consumer MUST
+      obtain a Snapshot Object for Group G or a later Group and replace
+      its held state.
+
+   *  A Consumer MUST NOT apply a Delta Object whose Group ID is at or
+      before its held state's Group ID.
+
+   *  A Consumer MAY replace its held state with a Snapshot Object for
+      the same or a later Group at any time.
+
+   *  An Egress Gateway answering a blocking request MUST defer the
+      response until its held Manifest Version reaches the requested
+      version, subject to its response deadline.
+
+7.3.  Format Definition: MPEG-DASH
+
+   This section defines the Format Definition (Section 5.15) for MPEG-
+   DASH [MPEG-DASH], with flavor set to dash.
+
+7.3.1.  Manifests
+
+   The MPD is the one Manifest.
+
+7.3.2.  Extensions
+
+   DASH adopts the Delta Track extension (Section 7.2); the MPD MAY have
+   a Delta Track.
+
+7.3.3.  Snapshot Form
+
+   A Snapshot Object (Section 5.11.1) is the MPD with the PatchLocation
+   element removed.
+
+7.3.4.  Delta Form
+
+   A Delta Object (Section 7.2.1) is one MPD Patch document; its
+   @originalPublishTime is the @publishTime of the preceding Snapshot
+   Object.  The Publisher MUST remove operations addressing
+   PatchLocation from it (Section 7.3.3).  The Delta Track's Content-
+   Type (Section 5.10) is application/dash-patch+xml.
+
+7.3.5.  Manifest Version
+
+   HAS_MANIFEST_VERSION (Section 5.11.2) is MPD@publishTime as an
+   xs:dateTime string, ordered by time.  A static MPD has no version.
+
+7.3.6.  Reset Points
+
+   A change of MPD@id starts a new Snapshot Group (Section 5.11.1).
+
+7.3.7.  Low-Latency Advertisement
+
+   The lowLatency field (Section 7.2) is { "patchLocation": { "path",
+   "ttl" } }: the PatchLocation element's path relative to the Root Path
+   and @ttl.  A delta-capable gateway inserts the element into the
+   served MPD.
+
+7.3.8.  Delta Requests
+
+   *  A request for patchLocation.path: a delta-capable gateway serves
+      the Delta Object of its held state; it answers 404 where the held
+      state has no Delta Object (Section 7.2.1), as does a non-delta
+      gateway (Section 6.1).
+
+   *  DASH has no blocking Manifest request.
+
+7.3.9.  Reconstruction
+
+   A Delta Object is applied as an MPD Patch to the held MPD
+   (Section 7.2.3).
+
+7.3.10.  Media Identifiers
+
+   A media binding (Section 5.12) carries representationId,
+   adaptationSetId and periodId.
+
+7.3.11.  Addressing
+
+   The addressing scheme (Section 5.5) is derived from the MPD; this
+   list is informative:
+
+   *  SegmentTemplate with $Number$: a template entry.  The Publisher
+      substitutes $RepresentationID$ and $Bandwidth$ before recording
+      the template; startNumber is the SegmentTemplate startNumber.
+
+   *  SegmentTemplate with $Time$ and @duration: a time entry; startTime
+      is @presentationTimeOffset and duration is @duration, both in
+      @timescale units.
+
+   *  SegmentTemplate with $Time$ and SegmentTimeline, SegmentList,
+      SegmentBase: an index entry.  The range of a SegmentBase Segment
+      is its mediaRange; the Publisher parses the segment index (sidx)
+      and binds one Group per subsegment.
+
+   *  An Initialization Data Request Path is an Initialization Segment
+      URL.
+
+7.3.12.  Track Continuity
+
+   A Representation that remains the same Media Stream across a Period
+   boundary keeps its Track, unless its Initialization Data changes or
+   $Number$ restarts (Section 5.3, Section 5.4).
+
+7.3.13.  Containers
+
+   The container is CMAF, as defined in Section 7.1.
+
+7.4.  Format Definition: HLS
+
+   This section defines the Format Definition (Section 5.15) for HLS
+   [I-D.pantos-hls-rfc8216bis], with flavor set to hls.
+
+7.4.1.  Manifests
+
+   The multivariant playlist and each media playlist are Manifests.
+
+7.4.2.  Extensions
+
+   HLS adopts the Delta Track extension (Section 7.2); a media playlist
+   MAY have a Delta Track, the multivariant playlist MUST NOT.
+
+7.4.3.  Snapshot Form
+
+   A Snapshot Object (Section 5.11.1) of a media playlist is the
+   playlist served without delivery directives, with:
+
+   *  EXT-X-SERVER-CONTROL without CAN-BLOCK-RELOAD, CAN-SKIP-UNTIL and
+      CAN-SKIP-DATERANGES.
+
+   *  EXT-X-PRELOAD-HINT and EXT-X-RENDITION-REPORT omitted.
+
+   EXT-X-PART tags are retained.  A Snapshot Object of a multivariant
+   playlist is the playlist unchanged.
+
+7.4.4.  Delta Form
+
+   A Delta Object (Section 7.2.1) is one Playlist Delta Update: the
+   response to _HLS_skip=YES at that state.  The Delta Track's Content-
+   Type (Section 5.10) is the playlist's.
+
+7.4.5.  Manifest Version
+
+   For a media playlist, HAS_MANIFEST_VERSION (Section 5.11.2) is <msn>
+   or <msn>/<part> in decimal: the Media Sequence Number of the last
+   listed segment and, while that segment is incomplete, the index of
+   its last Partial Segment.  Versions order by Media Sequence Number,
+   then Part Index; a version without a part is later than any part of
+   that segment.  The multivariant playlist has no version.
+
+7.4.6.  Reset Points
+
+   EXT-X-ENDLIST starts the final Snapshot Group (Section 5.11.1).
+
+7.4.7.  Low-Latency Advertisement
+
+   The lowLatency field (Section 7.2) is { "serverControl": "<attribute-
+   list>" }: the source's EXT-X-SERVER-CONTROL attribute list; CAN-SKIP-
+   DATERANGES MUST NOT appear in it.  A delta-capable gateway serves the
+   playlist with:
+
+   *  EXT-X-SERVER-CONTROL from serverControl, in place of the
+      snapshot's.
+
+   *  EXT-X-PRELOAD-HINT and EXT-X-RENDITION-REPORT from the last Delta
+      Object applied (Section 7.2.3).
+
+7.4.8.  Delta and Blocking Requests
+
+   Delivery directives (Section 6.2.5.1 of [I-D.pantos-hls-rfc8216bis]):
+
+   *  _HLS_skip=YES: a delta-capable gateway serves the Delta Object of
+      its held state, else the full playlist; a non-delta gateway serves
+      the full playlist (Section 6.1).
+
+   *  _HLS_skip=v2: every gateway serves the full playlist
+      (Section 6.1).
+
+   *  _HLS_msn/_HLS_part: a delta-capable gateway holds the request
+      until the held version (Section 7.2.3) reaches the requested one
+      (Section 7.4.5); a non-delta gateway ignores the directive.
+
+7.4.9.  Reconstruction
+
+   A Consumer merges a Delta Object with its held playlist using the
+   Playlist Delta Update rules of Section 6.3.7 of
+   [I-D.pantos-hls-rfc8216bis].  Let M be the Delta Object's EXT-X-
+   MEDIA-SEQUENCE value and K its EXT-X-SKIP SKIPPED-SEGMENTS value, or
+   zero if EXT-X-SKIP is absent.  The reconstructed playlist contains:
+
+   1.  The held segments with Media Sequence Numbers from M through
+       M+K-1, inclusive, when K is greater than zero.
+
+   2.  The segments listed in the Delta Object, beginning at M+K.
+
+   Segments preceding M are discarded.  The Consumer MUST preserve the
+   skipped segments' associated tags and the EXT-X-KEY and EXT-X-MAP
+   values that apply to them.  It uses the Delta Object's playlist-level
+   tags and metadata and removes EXT-X-SKIP from the reconstructed full
+   playlist.
+
+   If the held playlist lacks any information needed to restore the
+   skipped portion, the Consumer MUST obtain a Snapshot Object for the
+   Delta Object's Group or a later Group and replace its held state
+   (Section 7.2.3).
+
+7.4.10.  Media Identifiers
+
+   A media binding (Section 5.12) carries mediaPlaylistPath, the Media
+   Playlist's Request Path relative to the Root Path.
+
+7.4.11.  Addressing
+
+   The addressing scheme (Section 5.5) is derived from the Media
+   Playlist; this list is informative:
+
+   *  Segment URIs that differ only in one decimal: a template entry.
+      The Media Sequence Number plays no part in addressing.
+
+   *  Any other URIs: an index entry.  The range of an EXT-X-BYTERANGE
+      Segment is its byte range.
+
+   *  An Initialization Data Request Path is an EXT-X-MAP URI.
+
+7.4.12.  Partial Segments
+
+   An EXT-X-PART or EXT-X-PRELOAD-HINT URI is a part (Section 5.8); its
+   byte range, where present, is the BYTERANGE attribute.
+
+7.4.13.  Track Continuity
+
+   An EXT-X-DISCONTINUITY that changes EXT-X-MAP begins a new Track
+   (Section 5.3).  Otherwise, the Media Stream continues on the existing
+   Track.
+
+7.4.14.  Containers
+
+   *  fMP4: the container is CMAF, as defined in Section 7.1.
+
+   *  MPEG-2 TS: a Chunk is a 188-byte packet; a random-access point
+      includes the PAT/PMT.  The container is self-initializing.
+
+   *  Packed audio and WebVTT: these containers define no Chunks; the
+      Segment start is the random-access point.  The containers are
+      self-initializing.
+
+8.  Security Considerations
+
+   The mapping inherits the security properties of MOQT [MoQTransport].
+
+8.1.  Relay-Visible Metadata
+
+   Relays observe Full Track Names, Group/Object structure, and
+   unencrypted Properties, including the paths in HAS_ORIGINAL_REFERENCE
+   (Section 5.7).  A source whose Request Paths carry credentials
+   exposes them to every relay.  The fallbackOrigin field (Section 5.12)
+   exposes the origin URL to every relay and Subscriber.
+
+8.2.  Denial of Service
+
+   TODO (WG discussion): this section needs a full analysis.  Candidate
+   risk areas include relay resource exhaustion from a Publisher's
+   freedom to split a Segment into arbitrarily many small Objects
+   (Section 5.6), and cache-warming amplification from unauthenticated
+   SUBSCRIBE_TRACKS requests with the FORWARD parameter equal to 0
+   against the Presentation namespace (Appendix A.5; Section 13.1 of
+   [MoQTransport], Section 13.7.2 of [MoQTransport]).
+
+9.  IANA Considerations
+
+   IANA is requested to create the "HAS-o-MoQT Format Flavors" registry,
+   registration policy Specification Required (Section 4.6 of
+   [RFC8126]), with fields Flavor and Reference, initially:
+
+                 +========+==============================+
+                 | Flavor | Reference                    |
+                 +========+==============================+
+                 | dash   | Section 7.3 of this document |
+                 +--------+------------------------------+
+                 | hls    | Section 7.4 of this document |
+                 +--------+------------------------------+
+
+                                  Table 4
+
+   Property codepoints need no registry (Section 5.16).
+
+10.  References
+
+10.1.  Normative References
+
+   [CMAF]     "Information technology — Multimedia application format
+              (MPEG-A) — Part 19: Common media application format (CMAF)
+              for segmented media", ISO/IEC 23000-19:2024, 2024,
+              <https://www.iso.org/standard/85623.html>.
+
+   [I-D.pantos-hls-rfc8216bis]
+              Pantos, R., "HTTP Live Streaming 2nd Edition", Work in
+              Progress, Internet-Draft, draft-pantos-hls-rfc8216bis-22,
+              1 May 2026, <https://datatracker.ietf.org/doc/html/draft-
+              pantos-hls-rfc8216bis-22>.
+
+   [LOC]      Zanaty, M., Nandakumar, S., and P. Thatcher, "Low Overhead
+              Media Container", Work in Progress, Internet-Draft, draft-
+              ietf-moq-loc-04, 20 July 2026,
+              <https://datatracker.ietf.org/doc/html/draft-ietf-moq-loc-
+              04>.
+
+   [MoQTransport]
+              Nandakumar, S., Vasiliev, V., Swett, I., and A. Frindell,
+              "Media over QUIC Transport", Work in Progress, Internet-
+              Draft, draft-ietf-moq-transport-22, 1 October 2026,
+              <https://datatracker.ietf.org/doc/html/draft-ietf-moq-
+              transport-22>.
+
+   [MPEG-DASH]
+              "Information technology — Dynamic adaptive streaming over
+              HTTP (DASH) — Part 1: Media presentation description and
+              segment formats", ISO/IEC 23009-1:2022, 2022,
+              <https://www.iso.org/standard/83314.html>.
+
+   [MSF]      Law, W. and S. Nandakumar, "MOQT Streaming Format", Work
+              in Progress, Internet-Draft, draft-ietf-moq-msf-01, 2 June
+              2026, <https://datatracker.ietf.org/doc/html/draft-ietf-
+              moq-msf-01>.
+
+   [RFC20]    Cerf, V., "ASCII format for network interchange", STD 80,
+              RFC 20, DOI 10.17487/RFC20, October 1969,
+              <https://www.rfc-editor.org/rfc/rfc20>.
+
+   [RFC1952]  Deutsch, P., "GZIP file format specification version 4.3",
+              RFC 1952, DOI 10.17487/RFC1952, May 1996,
+              <https://www.rfc-editor.org/rfc/rfc1952>.
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997,
+              <https://www.rfc-editor.org/rfc/rfc2119>.
+
+   [RFC3986]  Berners-Lee, T., Fielding, R., and L. Masinter, "Uniform
+              Resource Identifier (URI): Generic Syntax", STD 66,
+              RFC 3986, DOI 10.17487/RFC3986, January 2005,
+              <https://www.rfc-editor.org/rfc/rfc3986>.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
+              May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
+
+   [RFC8259]  Bray, T., Ed., "The JavaScript Object Notation (JSON) Data
+              Interchange Format", STD 90, RFC 8259,
+              DOI 10.17487/RFC8259, December 2017,
+              <https://www.rfc-editor.org/rfc/rfc8259>.
+
+   [RFC9110]  Fielding, R., Ed., Nottingham, M., Ed., and J. Reschke,
+              Ed., "HTTP Semantics", STD 97, RFC 9110,
+              DOI 10.17487/RFC9110, June 2022,
+              <https://www.rfc-editor.org/rfc/rfc9110>.
+
+10.2.  Informative References
+
+   [RFC3967]  Bush, R. and T. Narten, "Clarifying when Standards Track
+              Documents may Refer Normatively to Documents at a Lower
+              Level", BCP 97, RFC 3967, DOI 10.17487/RFC3967, January
+              2005, <https://www.rfc-editor.org/rfc/rfc3967>.
+
+   [RFC8067]  Leiba, B., "Updating When Standards Track Documents May
+              Refer Normatively to Documents at a Lower Level", BCP 97,
+              RFC 8067, DOI 10.17487/RFC8067, January 2017,
+              <https://www.rfc-editor.org/rfc/rfc8067>.
+
+   [RFC8126]  Cotton, M., Leiba, B., and T. Narten, "Guidelines for
+              Writing an IANA Considerations Section in RFCs", BCP 26,
+              RFC 8126, DOI 10.17487/RFC8126, June 2017,
+              <https://www.rfc-editor.org/rfc/rfc8126>.
+
+   [RFC8216]  Pantos, R., Ed. and W. May, "HTTP Live Streaming",
+              RFC 8216, DOI 10.17487/RFC8216, August 2017,
+              <https://www.rfc-editor.org/rfc/rfc8216>.
+
+   [RFC8246]  McManus, P., "HTTP Immutable Responses", RFC 8246,
+              DOI 10.17487/RFC8246, September 2017,
+              <https://www.rfc-editor.org/rfc/rfc8246>.
+
+   [RFC9111]  Fielding, R., Ed., Nottingham, M., Ed., and J. Reschke,
+              Ed., "HTTP Caching", STD 98, RFC 9111,
+              DOI 10.17487/RFC9111, June 2022,
+              <https://www.rfc-editor.org/rfc/rfc9111>.
+
+Appendix A.  Egress Gateway Operation
+
+   This appendix is informative.
+
+A.1.  Configuration
+
+   An Egress Gateway is configured out of band to map an incoming HTTP
+   request onto a MOQT Location:
+
+   *  Scope: the HTTP authority (host) selects the relay or origin the
+      gateway connects to.
+
+   *  Path: the Request Path is split, by a preconfigured rule, into a
+      Root Path selecting a Presentation Track Namespace and the
+      remainder (Section 5.5).
+
+A.2.  Serving a Request
+
+   On an HTTP request the gateway:
+
+   1.  Resolves the authority to a MOQT connection and connects if not
+       already connected.
+
+   2.  Splits the Request Path into (namespace, remainder) per
+       configuration.
+
+   3.  Subscribes to the Presentation's Mapping Manifest Track (if not
+       already) and reads the Track bindings and initRef values; for a
+       Track with an Index Track, subscribes to it.
+
+   4.  Classifies the remainder using the Mapping Manifest and responds
+       (Section 6):
+
+       *  Manifest, delta or blocking request: per the gateway's profile
+          (Section 7.2.2).
+
+       *  Initialization Data: Section 5.9.
+
+       *  Media Segment: an HTTP byte-range request is honored by
+          computing Object offsets within the Segment (Section 5.6).
+
+A.3.  Choosing the Retrieval Mode
+
+   The gateway chooses among the retrieval modes of Section 5.17 by the
+   Segment's position relative to the live edge: FETCH behind it;
+   SUBSCRIBE with FILL_PARAMETERS at or just behind it, when the client
+   will keep playing forward.
+
+A.4.  Subscription Lifecycle and Cache
+
+   *  The gateway keeps its Mapping Manifest subscription for a
+      namespace alive as long as requests into that namespace continue,
+      and drops it after an idle timeout.
+
+   *  Retrieved Objects are cached keyed by Full Track Name, Group ID
+      and Object ID and reused across HTTP requests, as a relay cache
+      would.
+
+A.5.  Warming Up
+
+   Before serving the first request into a Presentation the gateway
+   subscribes to and parses the Mapping Manifest (Section 5.12), one
+   upstream round trip.  Ahead of demand, a gateway may issue
+   SUBSCRIBE_TRACKS (Section 10.20 of [MoQTransport]) over the
+   Presentation namespace or one of its sub-namespaces (Section 5.1)
+   with the FORWARD parameter (Section 10.2.18 of [MoQTransport]) equal
+   to 0; the gateway learns each Media Stream Track's Initialization
+   Data (a Track Property) and the versions on the Mapping Manifest
+   Track before any Object is requested.
+
+Appendix B.  Examples
+
+   This appendix is informative.
+
+   One live Presentation, carried as both DASH (Section 7.3) and HLS
+   (Section 7.4) from the same Segments:
+
+   *  video-1080p, video-720p, audio-en: referenced by both Formats'
+      Manifests.
+
+   *  audio-cs, sub-en: referenced by the HLS Manifests only.
+
+B.1.  Mapping Manifest
+
+   The full document (Object 0 of a Group).  It exercises:
+
+   *  addressing scheme template (Section 5.5) plain (audio-en), zero-
+      padded (video-1080p), and with a $$ literal on a Track begun by a
+      numbering restart, its startGroup continuing the timeline (sub-
+      en).
+
+   *  scheme time (video-720p).
+
+   *  scheme index with its Index Track (audio-cs, Appendix B.3).
+
+   *  Initialization Data as a Track Property, inline, and absent for a
+      self-initializing container (sub-en).
+
+   *  the Delta Track extension (Section 7.2) with lowLatency (the MPD,
+      the 1080p playlist), without it (the 720p playlist), and Manifests
+      without a Delta Track.
+
+   {
+     "generatedAt": 1788742800000,
+     "isLive": true,
+     "manifests": [
+       { "flavor": "dash", "path": "manifest.mpd",
+         "snapshotTrack": "manifest.mpd",
+         "extension": { "deltaTrack": "manifest.mpd.patch",
+           "lowLatency": { "patchLocation": {
+             "path": "manifest.mpd.patch", "ttl": 60 } } },
+         "media": [
+           { "track": "video-1080p", "representationId": "v1080",
+             "adaptationSetId": "1", "periodId": "p0" },
+           { "track": "video-720p", "representationId": "v720",
+             "adaptationSetId": "1", "periodId": "p0" },
+           { "track": "audio-en", "representationId": "a-en",
+             "adaptationSetId": "2", "periodId": "p0" }
+         ] },
+       { "flavor": "hls", "path": "master.m3u8",
+         "snapshotTrack": "master.m3u8" },
+       { "flavor": "hls", "path": "video/1080p/media.m3u8",
+         "snapshotTrack": "video/1080p/media.m3u8",
+         "extension": { "deltaTrack": "video/1080p/media.m3u8.delta",
+           "lowLatency": { "serverControl":
+         "CAN-BLOCK-RELOAD=YES,PART-HOLD-BACK=1.0,CAN-SKIP-UNTIL=24.0"
+           } },
+         "media": [ { "track": "video-1080p",
+           "mediaPlaylistPath": "video/1080p/media.m3u8" } ] },
+       { "flavor": "hls", "path": "video/720p/media.m3u8",
+         "snapshotTrack": "video/720p/media.m3u8",
+         "extension": { "deltaTrack": "video/720p/media.m3u8.delta" },
+         "media": [ { "track": "video-720p",
+           "mediaPlaylistPath": "video/720p/media.m3u8" } ] },
+       { "flavor": "hls", "path": "audio/en/media.m3u8",
+         "snapshotTrack": "audio/en/media.m3u8",
+         "media": [ { "track": "audio-en",
+           "mediaPlaylistPath": "audio/en/media.m3u8" } ] },
+       { "flavor": "hls", "path": "audio/cs/media.m3u8",
+         "snapshotTrack": "audio/cs/media.m3u8",
+         "media": [ { "track": "audio-cs",
+           "mediaPlaylistPath": "audio/cs/media.m3u8" } ] },
+       { "flavor": "hls", "path": "sub/en/media.m3u8",
+         "snapshotTrack": "sub/en/media.m3u8",
+         "media": [ { "track": "sub-en",
+           "mediaPlaylistPath": "sub/en/media.m3u8" } ] }
+     ],
+     "tracks": [
+       { "name": "video-1080p", "initRef": "init-v1080",
+         "addressing": { "scheme": "template",
+           "template": "video/1080p/seg-$Number%05d$.m4s",
+           "startNumber": 1, "startGroup": 0 } },
+       { "name": "video-720p", "initRef": "init-v720",
+         "addressing": { "scheme": "time",
+           "template": "video/720p/seg-$Time$.m4s",
+           "startTime": 900000, "duration": 180000, "startGroup": 0 } },
+       { "name": "audio-en", "initRef": "init-a-en",
+         "addressing": { "scheme": "template",
+           "template": "audio/en/seg-$Number$.m4s",
+           "startNumber": 1, "startGroup": 0 } },
+       { "name": "audio-cs", "initRef": "init-a-cs",
+         "addressing": { "scheme": "index",
+           "indexTrack": "audio-cs-index" } },
+       { "name": "sub-en",
+         "addressing": { "scheme": "template",
+           "template": "sub/en/seg$$-$Number$.vtt",
+           "startNumber": 0, "startGroup": 3600 } }
+     ],
+     "initDataList": [
+       { "id": "init-v1080", "type": "track-property", "data": "0x0D",
+         "path": "video/1080p/init.mp4",
+         "headers": { "content-type": "video/mp4" } },
+       { "id": "init-v720", "type": "track-property", "data": "0x0D",
+         "path": "video/720p/init.mp4",
+         "headers": { "content-type": "video/mp4" } },
+       { "id": "init-a-en", "type": "track-property", "data": "0x0F",
+         "path": "audio/en/init.mp4",
+         "headers": { "content-type": "audio/mp4" } },
+       { "id": "init-a-cs", "type": "inline",
+         "data": "AAAAGGZ0eXBjbWZjAAAAAGNtZmNpc282",
+         "path": "audio/cs/init.mp4",
+         "headers": { "content-type": "audio/mp4" } }
+     ]
+   }
+
+B.2.  Mapping Manifest Updates
+
+   Three update documents (Section 5.12.1): the later Objects of the
+   same Group, applied in order.
+
+   Object 1 adds a German audio rendition: the initDataList entry first,
+   the tracks entry as a clone of audio-en with its initRef
+   (Section 5.12), the new HLS manifests entry, and the MPD entry's new
+   media binding as a remove plus add of the entry:
+
+   {
+     "deltaUpdate": [
+       { "op": "add", "initDataList": [
+           { "id": "init-a-de", "type": "track-property",
+             "data": "0x0F", "path": "audio/de/init.mp4",
+             "headers": { "content-type": "audio/mp4" } } ] },
+       { "op": "clone", "tracks": [
+           { "name": "audio-de", "parentName": "audio-en",
+             "initRef": "init-a-de",
+             "addressing": { "scheme": "template",
+               "template": "audio/de/seg-$Number$.m4s",
+               "startNumber": 1, "startGroup": 0 } } ] },
+       { "op": "remove", "manifests": [ { "path": "manifest.mpd" } ] },
+       { "op": "add", "manifests": [
+           { "flavor": "dash", "path": "manifest.mpd",
+             "snapshotTrack": "manifest.mpd",
+             "extension": { "deltaTrack": "manifest.mpd.patch",
+               "lowLatency": { "patchLocation": {
+                 "path": "manifest.mpd.patch", "ttl": 60 } } },
+             "media": [
+               { "track": "video-1080p", "representationId": "v1080",
+                 "adaptationSetId": "1", "periodId": "p0" },
+               { "track": "video-720p", "representationId": "v720",
+                 "adaptationSetId": "1", "periodId": "p0" },
+               { "track": "audio-en", "representationId": "a-en",
+                 "adaptationSetId": "2", "periodId": "p0" },
+               { "track": "audio-de", "representationId": "a-de",
+                 "adaptationSetId": "3", "periodId": "p0" }
+             ] },
+           { "flavor": "hls", "path": "audio/de/media.m3u8",
+             "snapshotTrack": "audio/de/media.m3u8",
+             "media": [ { "track": "audio-de",
+               "mediaPlaylistPath": "audio/de/media.m3u8" } ] } ] }
+     ]
+   }
+
+   Object 2 gives the English audio playlist a Delta Track, again as a
+   remove plus add:
+
+   {
+     "deltaUpdate": [
+       { "op": "remove", "manifests": [
+           { "path": "audio/en/media.m3u8" } ] },
+       { "op": "add", "manifests": [
+           { "flavor": "hls", "path": "audio/en/media.m3u8",
+             "snapshotTrack": "audio/en/media.m3u8",
+             "extension": { "deltaTrack": "audio/en/media.m3u8.delta",
+               "lowLatency": { "serverControl":
+                 "CAN-BLOCK-RELOAD=YES,CAN-SKIP-UNTIL=12.0" } },
+             "media": [ { "track": "audio-en",
+               "mediaPlaylistPath": "audio/en/media.m3u8" } ] } ] }
+     ]
+   }
+
+   Object 3 ends the commentary audio; a remove entry holds only its
+   path, name or id:
+
+   {
+     "deltaUpdate": [
+       { "op": "remove", "manifests": [
+           { "path": "audio/cs/media.m3u8" } ] },
+       { "op": "remove", "tracks": [ { "name": "audio-cs" } ] },
+       { "op": "remove", "initDataList": [ { "id": "init-a-cs" } ] }
+     ]
+   }
+
+B.3.  Index Track
+
+   The full document (Object 0 of a Group) of audio-cs-index
+   (Section 5.13.1).  The commentary Segments are byte ranges of one
+   resource:
+
+   {
+     "bindings": [
+       { "group": 0, "path": "audio/cs/media.mp4", "range": "912-165423" },
+       { "group": 1, "path": "audio/cs/media.mp4", "range": "165424-329871" },
+       { "group": 2, "path": "audio/cs/media.mp4", "range": "329872-494319" }
+     ]
+   }
+
+   An update document (Section 5.13.2), appending the next Segment, a
+   whole file without range:
+
+   {
+     "bindings": [
+       { "group": 3, "path": "audio/cs/seg-0003.m4s" }
+     ]
+   }
+
+Acknowledgments
+
+   TODO: acknowledge contributors.
+
+Author's Address
+
+   Michal Hosna
+   CDN77
+   Email: mh@michalhosna.com
